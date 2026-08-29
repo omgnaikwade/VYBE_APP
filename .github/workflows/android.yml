@@ -6,7 +6,8 @@ on:
 
 jobs:
   build:
-    runs-on: ubuntu-latest
+    # 💡 Ubuntu 22.04 use karo (24.04 mein debug keystore issue aata hai)
+    runs-on: ubuntu-22.04
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -16,6 +17,9 @@ jobs:
         with:
           java-version: '17'
           distribution: 'temurin'
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
 
       - name: Make Gradle executable
         run: chmod +x gradlew
@@ -27,4 +31,4 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: VybePlayer-APK
-          path: app/build/outputs/apk/debug/app-debug.apk
+          path: app/build/outputs/apk/debug/*.apk
