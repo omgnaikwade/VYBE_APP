@@ -6,6 +6,7 @@ import yt_dlp
 import os
 import tempfile
 import subprocess
+import time  # <-- Naya import add kiya hai
 from typing import Optional, List
 
 # ----- COOKIE FILE SETUP (ONLY FOR YT-DLP) -----
@@ -122,61 +123,70 @@ async def get_stream(video_id: str):
     
     youtube_url = f"https://www.youtube.com/watch?v={video_id}"
     
-    try:
-        # Build yt-dlp command to get audio URL
-        cmd = [
-            "yt-dlp",
-            "-f", "bestaudio",
-            "--get-url",
-            "--no-playlist",
-            # --- NEW FLAGS ADDED HERE ---
-            "--remote-components", "ejs:github",
-            "--js-runtimes", "deno",
-            "--extractor-args", "youtube:player_client=tv,web",
-            # -----------------------------
-            youtube_url
-        ]
-        if COOKIE_FILE:
-            cmd.insert(1, "--cookies")   # insert after yt-dlp
-            cmd.insert(2, COOKIE_FILE)
+    # Retry Logic: YouTube kabhi kabhi transient (temporary) block karta hai, isliye 3 baar try karenge
+    for attempt in range(3):
+        try:
+            # Build yt-dlp command to get audio URL
+            # -4 flag DNS issues se bachne ke liye hai
+            cmd = [
+                "yt-dlp",
+                "-4",
+                "-f", "bestaudio",
+                "--get-url",
+                "--no-playlist",
+                "--remote-components", "ejs:github",
+                "--js-runtimes", "deno",
+                "--extractor-args", "youtube:player_client=tv,web",
+                youtube_url
+            ]
+            if COOKIE_FILE:
+                cmd.insert(1, "--cookies")   # insert after yt-dlp
+                cmd.insert(2, COOKIE_FILE)
+            
+            result = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
+            if result.returncode != 0:
+                raise Exception(result.stderr)
+            
+            audio_url = result.stdout.strip()
+            if not audio_url:
+                raise Exception("No audio URL returned")
+            
+            # Get title using yt-dlp
+            title_cmd = [
+                "yt-dlp",
+                "-4",
+                "--get-title",
+                "--no-playlist",
+                "--remote-components", "ejs:github",
+                "--js-runtimes", "deno",
+                "--extractor-args", "youtube:player_client=tv,web",
+                youtube_url
+            ]
+            if COOKIE_FILE:
+                title_cmd.insert(1, "--cookies")
+                title_cmd.insert(2, COOKIE_FILE)
+            
+            title_result = subprocess.run(title_cmd, capture_output=True, text=True, timeout=30)
+            title = title_result.stdout.strip() if title_result.returncode == 0 else f"Track {video_id}"
+            
+            return StreamResponse(
+                videoId=video_id,
+                title=title,
+                audioUrl=audio_url
+            )
+            
+        except subprocess.TimeoutExpired:
+            if attempt == 2:  # Last attempt
+                raise HTTPException(status_code=500, detail="yt-dlp timeout")
+            time.sleep(5) # Wait 5 seconds before retrying
         
-        result = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
-        if result.returncode != 0:
-            raise Exception(result.stderr)
-        
-        audio_url = result.stdout.strip()
-        if not audio_url:
-            raise Exception("No audio URL returned")
-        
-        # Get title using yt-dlp
-        title_cmd = [
-            "yt-dlp",
-            "--get-title",
-            "--no-playlist",
-            # --- NEW FLAGS ADDED HERE ---
-            "--remote-components", "ejs:github",
-            "--js-runtimes", "deno",
-            "--extractor-args", "youtube:player_client=tv,web",
-            # -----------------------------
-            youtube_url
-        ]
-        if COOKIE_FILE:
-            title_cmd.insert(1, "--cookies")
-            title_cmd.insert(2, COOKIE_FILE)
-        
-        title_result = subprocess.run(title_cmd, capture_output=True, text=True, timeout=30)
-        title = title_result.stdout.strip() if title_result.returncode == 0 else f"Track {video_id}"
-        
-        return StreamResponse(
-            videoId=video_id,
-            title=title,
-            audioUrl=audio_url
-        )
-        
-    except subprocess.TimeoutExpired:
-        raise HTTPException(status_code=500, detail="yt-dlp timeout")
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Audio extraction failed: {str(e)}")
+        except Exception as e:
+            # Agar error "reloaded" ya "Signature" ka hai, toh try karo warna seedha error do
+            if attempt < 2 and ("reloaded" in str(e) or "Signature" in str(e)):
+                print(f"Attempt {attempt + 1} failed, retrying... Error: {e}")
+                time.sleep(5) # Wait 5 seconds before retrying
+            else:
+                raise HTTPException(status_code=500, detail=f"Audio extraction failed: {str(e)}")
 
 # -------------------- PLAYLIST (unauthenticated) --------------------
 @app.get("/playlist/{playlist_id}")
@@ -214,4 +224,4 @@ async def get_playlist(playlist_id: str):
     return PlaylistResponse(
         playlistName=playlist.get("title", None),
         songs=songs
-        )
+)
