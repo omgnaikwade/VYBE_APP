@@ -1,0 +1,39 @@
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:aapt="http://schemas.android.com/aapt"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <!-- Center 66dp area -->
+    <group
+        android:scaleX="0.85"
+        android:scaleY="0.85"
+        android:pivotX="54"
+        android:pivotY="54">
+        <!-- V letterform & Music waveform icon -->
+        <path
+            android:pathData="M32,36 L54,74 L76,36 L66,36 L54,58 L42,36 Z">
+            <aapt:attr name="android:fillColor">
+                <gradient
+                    android:startX="32"
+                    android:startY="36"
+                    android:endX="76"
+                    android:endY="74"
+                    android:type="linear">
+                    <item android:offset="0.0" android:color="#FF2D75" />
+                    <item android:offset="0.6" android:color="#D946EF" />
+                    <item android:offset="1.0" android:color="#8B5CF6" />
+                </gradient>
+            </aapt:attr>
+        </path>
+        <path
+            android:pathData="M51,30 L57,30 L57,48 L51,48 Z"
+            android:fillColor="#FF2D75" />
+        <path
+            android:pathData="M60,24 L66,24 L66,32 L60,32 Z"
+            android:fillColor="#EC4899" />
+        <path
+            android:pathData="M42,24 L48,24 L48,32 L42,32 Z"
+            android:fillColor="#A855F7" />
+    </group>
+</vector>
