@@ -27,6 +27,8 @@ def get_cookie_file():
         return None
 
 COOKIE_FILE = get_cookie_file()
+if COOKIE_FILE:
+    print(f"📄 Cookie file path: {COOKIE_FILE}")
 # ----- END COOKIE FIX -----
 
 app = FastAPI(title="VYBE Music Backend API")
@@ -297,12 +299,8 @@ async def get_stream(video_id: str):
                 "quiet": True,
                 "no_warnings": True,
 
-                # Prefer audio-only formats.
-                "format": (
-                    "bestaudio[acodec!=none]"
-                    "/bestaudio"
-                    "/best"
-                ),
+                # SIMPLIFIED FORMAT – FIXES "not available" error
+                "format": "bestaudio",
 
                 # Do not download the media.
                 "skip_download": True,
@@ -312,6 +310,9 @@ async def get_stream(video_id: str):
 
                 # Do not stop if format checking fails.
                 "check_formats": False,
+
+                # Ignore minor errors
+                "ignoreerrors": True,
 
                 # Browser-like headers.
                 "http_headers": {
@@ -356,10 +357,10 @@ async def get_stream(video_id: str):
                 )
                 continue
 
+            # Try to get direct URL
             audio_url = info.get("url")
 
-            # If direct URL wasn't selected,
-            # search available formats manually.
+            # If direct URL not present, search formats manually
             if not audio_url:
 
                 formats = info.get(
@@ -424,14 +425,11 @@ async def get_stream(video_id: str):
         ydl_opts = {
             "quiet": True,
             "no_warnings": True,
-            "format": (
-                "bestaudio[acodec!=none]"
-                "/bestaudio"
-                "/best"
-            ),
+            "format": "bestaudio",   # SIMPLIFIED
             "skip_download": True,
             "noplaylist": True,
             "check_formats": False,
+            "ignoreerrors": True,
             "http_headers": {
                 "User-Agent": (
                     "Mozilla/5.0 "
@@ -625,4 +623,4 @@ if __name__ == "__main__":
         host="0.0.0.0",
         port=8000,
         reload=True
-    )
+        )
