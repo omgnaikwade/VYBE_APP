@@ -6,7 +6,11 @@ import yt_dlp
 import uvicorn
 from typing import Optional, List
 
-app = FastAPI(title="YouTube Music API")
+app = FastAPI(title="VYBE Music Backend API")
+
+# ---------------------------------------------------------
+# CORS
+# ---------------------------------------------------------
 
 app.add_middleware(
     CORSMiddleware,
@@ -17,178 +21,516 @@ app.add_middleware(
 
 yt = YTMusic()
 
+
+# ---------------------------------------------------------
+# RESPONSE MODELS
+# ---------------------------------------------------------
+
 class SearchResponse(BaseModel):
     videoId: str
     title: str
     artist: str
     album: Optional[str] = None
-    thumbnail: str
+    thumbnail: str = ""
     duration: Optional[int] = None
+
 
 class StreamResponse(BaseModel):
     videoId: str
     title: str
     audioUrl: str
 
+
+class PlaylistResponse(BaseModel):
+    playlistName: Optional[str] = None
+    songs: List[SearchResponse]
+
+
+# ---------------------------------------------------------
+# ROOT
+# ---------------------------------------------------------
+
 @app.get("/")
 async def root():
-    return {"status": "ok", "service": "VYBE Music Backend API"}
+    return {
+        "status": "ok",
+        "service": "VYBE Music Backend API"
+    }
+
+
+# ---------------------------------------------------------
+# SEARCH
+# ---------------------------------------------------------
 
 @app.get("/search", response_model=List[SearchResponse])
 async def search_songs(query: str, limit: int = 10):
+
+    query = query.strip()
+
+    if not query:
+        return []
+
+    limit = max(1, min(limit, 50))
+
     try:
-        results = yt.search(query, filter="songs", limit=limit)
-    except Exception as e:
-        # Fallback to general search if song filter raises exception
-        results = yt.search(query, limit=limit)
+        results = yt.search(
+            query,
+            filter="songs",
+            limit=limit
+        )
+    except Exception:
+        try:
+            results = yt.search(
+                query,
+                limit=limit
+            )
+        except Exception as e:
+            raise HTTPException(
+                status_code=500,
+                detail=f"Search failed: {str(e)}"
+            )
 
     songs = []
 
     for item in results:
-        v_id = item.get("videoId")
-        if not v_id:
+
+        video_id = item.get("videoId")
+
+        if not video_id:
             continue
 
-        # Extract artist safely
-        artist_name = "Unknown"
-        if item.get("artists") and len(item["artists"]) > 0:
-            artist_name = item["artists"][0].get("name", "Unknown")
+        # Artist
+        artist_name = "Unknown Artist"
 
-        # Extract album safely
+        artists = item.get("artists")
+
+        if artists and isinstance(artists, list):
+            if len(artists) > 0:
+                artist_name = artists[0].get(
+                    "name",
+                    "Unknown Artist"
+                )
+
+        # Album
         album_name = None
-        if item.get("album") and isinstance(item["album"], dict):
-            album_name = item["album"].get("name")
 
-        # Extract thumbnail safely (highest quality)
-        thumb_url = ""
-        if item.get("thumbnails") and len(item["thumbnails"]) > 0:
-            thumb_url = item["thumbnails"][-1].get("url", "")
+        album = item.get("album")
 
-        # Extract duration in seconds safely
-        duration_sec = None
-        if "duration_seconds" in item and item["duration_seconds"]:
-            duration_sec = item["duration_seconds"]
-        elif "duration" in item and item["duration"]:
-            dur_str = str(item["duration"])
+        if isinstance(album, dict):
+            album_name = album.get("name")
+
+        # Thumbnail
+        thumbnail = ""
+
+        thumbnails = item.get("thumbnails")
+
+        if thumbnails and isinstance(thumbnails, list):
+            thumbnail = thumbnails[-1].get(
+                "url",
+                ""
+            )
+
+        # Duration
+        duration_seconds = None
+
+        if item.get("duration_seconds"):
+            duration_seconds = item.get(
+                "duration_seconds"
+            )
+
+        elif item.get("duration"):
             try:
-                parts = [int(p) for p in dur_str.split(":")]
-                if len(parts) == 2:
-                    duration_sec = parts[0] * 60 + parts[1]
-                elif len(parts) == 3:
-                    duration_sec = parts[0] * 3600 + parts[1] * 60 + parts[2]
-                elif len(parts) == 1:
-                    duration_sec = parts[0]
-            except Exception:
-                duration_sec = None
+                duration_string = str(
+                    item.get("duration")
+                )
 
-        songs.append({
-            "videoId": v_id,
-            "title": item.get("title", "Unknown Title"),
-            "artist": artist_name,
-            "album": album_name,
-            "thumbnail": thumb_url,
-            "duration": duration_sec,
-        })
+                parts = [
+                    int(x)
+                    for x in duration_string.split(":")
+                ]
+
+                if len(parts) == 3:
+                    duration_seconds = (
+                        parts[0] * 3600
+                        + parts[1] * 60
+                        + parts[2]
+                    )
+
+                elif len(parts) == 2:
+                    duration_seconds = (
+                        parts[0] * 60
+                        + parts[1]
+                    )
+
+                elif len(parts) == 1:
+                    duration_seconds = parts[0]
+
+            except Exception:
+                duration_seconds = None
+
+        songs.append(
+            SearchResponse(
+                videoId=video_id,
+                title=item.get(
+                    "title",
+                    f"Track {video_id}"
+                ),
+                artist=artist_name,
+                album=album_name,
+                thumbnail=thumbnail,
+                duration=duration_seconds
+            )
+        )
 
     return songs
 
-@app.get("/stream/{video_id}", response_model=StreamResponse)
+
+# ---------------------------------------------------------
+# STREAM EXTRACTION
+# ---------------------------------------------------------
+
+@app.get(
+    "/stream/{video_id}",
+    response_model=StreamResponse
+)
 async def get_stream(video_id: str):
-    title = f"Track {video_id}"
-    try:
-        search_result = yt.search(
-            f"https://music.youtube.com/watch?v={video_id}",
-            filter="songs",
-            limit=1
+
+    video_id = video_id.strip()
+
+    if not video_id:
+        raise HTTPException(
+            status_code=400,
+            detail="Missing video ID"
         )
-        if search_result and len(search_result) > 0:
-            song = search_result[0]
-            title = song.get("title", title)
-    except Exception:
-        pass
 
-    ydl_opts = {
-        "format": "bestaudio/best",
-        "quiet": True,
-        "no_warnings": True,
-        "extract_flat": False,
-    }
+    youtube_url = (
+        f"https://www.youtube.com/watch?v={video_id}"
+    )
 
-    url = f"https://www.youtube.com/watch?v={video_id}"
+    music_url = (
+        f"https://music.youtube.com/watch?v={video_id}"
+    )
 
-    try:
-        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-            info = ydl.extract_info(url, download=False)
+    # -----------------------------------------------------
+    # Try different extractor configurations.
+    #
+    # YouTube currently changes client/PO-token
+    # requirements frequently, so fallback is intentional.
+    # -----------------------------------------------------
 
-            audio_url = None
+    extractor_configs = [
 
-            if "url" in info:
-                audio_url = info["url"]
+        # Configuration 1
+        {
+            "name": "android_vr",
+            "extractor_args": {
+                "youtube": {
+                    "player_client": ["android_vr"]
+                }
+            }
+        },
 
-            elif "formats" in info:
-                for f in info["formats"]:
-                    if (
-                        f.get("acodec") != "none"
-                        and f.get("vcodec") == "none"
-                    ):
-                        audio_url = f.get("url")
-                        if audio_url:
-                            break
+        # Configuration 2
+        {
+            "name": "web_embedded",
+            "extractor_args": {
+                "youtube": {
+                    "player_client": ["web_embedded"]
+                }
+            }
+        },
 
-                if not audio_url and info["formats"]:
-                    audio_url = info["formats"][-1].get("url")
+        # Configuration 3
+        {
+            "name": "android_vr + web_embedded",
+            "extractor_args": {
+                "youtube": {
+                    "player_client": [
+                        "android_vr",
+                        "web_embedded"
+                    ]
+                }
+            }
+        },
 
-            if not audio_url:
-                raise HTTPException(
-                    status_code=500,
-                    detail="Could not extract audio URL"
+        # Configuration 4
+        {
+            "name": "default",
+            "extractor_args": {
+                "youtube": {
+                    "player_client": ["default"]
+                }
+            }
+        }
+    ]
+
+    last_error = "Unknown extraction error"
+
+    for config in extractor_configs:
+
+        try:
+
+            ydl_opts = {
+                "quiet": True,
+                "no_warnings": True,
+
+                # Prefer audio-only formats.
+                "format": (
+                    "bestaudio[acodec!=none]"
+                    "/bestaudio"
+                    "/best"
+                ),
+
+                # Do not download the media.
+                "skip_download": True,
+
+                # Avoid playlist processing.
+                "noplaylist": True,
+
+                # Do not stop if format checking fails.
+                "check_formats": False,
+
+                # Browser-like headers.
+                "http_headers": {
+                    "User-Agent": (
+                        "Mozilla/5.0 "
+                        "(Linux; Android 14) "
+                        "AppleWebKit/537.36 "
+                        "(KHTML, like Gecko) "
+                        "Chrome/124.0.0.0 "
+                        "Mobile Safari/537.36"
+                    ),
+                    "Accept-Language": "en-US,en;q=0.9"
+                },
+
+                # Current extractor configuration.
+                "extractor_args": config[
+                    "extractor_args"
+                ],
+
+                # Retry network requests.
+                "retries": 3,
+
+                # Do not download.
+                "cachedir": False,
+            }
+
+            with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+
+                info = ydl.extract_info(
+                    youtube_url,
+                    download=False
                 )
 
-            extracted_title = info.get("title", title)
+            if not info:
+                last_error = (
+                    f"{config['name']}: empty response"
+                )
+                continue
 
-            return {
-                "videoId": video_id,
-                "title": extracted_title,
-                "audioUrl": audio_url
-            }
+            audio_url = info.get("url")
+
+            # If direct URL wasn't selected,
+            # search available formats manually.
+            if not audio_url:
+
+                formats = info.get(
+                    "formats",
+                    []
+                )
+
+                audio_formats = [
+                    f
+                    for f in formats
+                    if f.get("url")
+                    and f.get("acodec") != "none"
+                    and f.get("vcodec") == "none"
+                ]
+
+                if audio_formats:
+
+                    # Highest bitrate audio first.
+                    audio_formats.sort(
+                        key=lambda f: (
+                            f.get("abr") or 0
+                        ),
+                        reverse=True
+                    )
+
+                    audio_url = (
+                        audio_formats[0].get("url")
+                    )
+
+            if audio_url:
+
+                title = info.get(
+                    "title",
+                    f"Track {video_id}"
+                )
+
+                return StreamResponse(
+                    videoId=video_id,
+                    title=title,
+                    audioUrl=audio_url
+                )
+
+            last_error = (
+                f"{config['name']}: "
+                "no playable audio format"
+            )
+
+        except Exception as e:
+
+            last_error = (
+                f"{config['name']}: {str(e)}"
+            )
+
+            continue
+
+    # -----------------------------------------------------
+    # Final fallback: try YouTube Music URL
+    # -----------------------------------------------------
+
+    try:
+
+        ydl_opts = {
+            "quiet": True,
+            "no_warnings": True,
+            "format": (
+                "bestaudio[acodec!=none]"
+                "/bestaudio"
+                "/best"
+            ),
+            "skip_download": True,
+            "noplaylist": True,
+            "check_formats": False,
+            "http_headers": {
+                "User-Agent": (
+                    "Mozilla/5.0 "
+                    "(Linux; Android 14) "
+                    "AppleWebKit/537.36 "
+                    "(KHTML, like Gecko) "
+                    "Chrome/124.0.0.0 "
+                    "Mobile Safari/537.36"
+                ),
+                "Accept-Language": "en-US,en;q=0.9"
+            },
+            "extractor_args": {
+                "youtube": {
+                    "player_client": [
+                        "android_vr"
+                    ]
+                }
+            },
+            "noplaylist": True,
+        }
+
+        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+
+            info = ydl.extract_info(
+                music_url,
+                download=False
+            )
+
+        if info:
+
+            audio_url = info.get("url")
+
+            if audio_url:
+
+                return StreamResponse(
+                    videoId=video_id,
+                    title=info.get(
+                        "title",
+                        f"Track {video_id}"
+                    ),
+                    audioUrl=audio_url
+                )
+
     except Exception as e:
-        raise HTTPException(
-            status_code=500,
-            detail=f"Audio extraction failed: {str(e)}"
+
+        last_error = (
+            f"Music fallback: {str(e)}"
         )
 
-@app.get("/playlist/{playlist_id}")
-async def get_playlist(playlist_id: str):
+    # -----------------------------------------------------
+    # Everything failed
+    # -----------------------------------------------------
+
+    raise HTTPException(
+        status_code=500,
+        detail=(
+            "Audio extraction failed. "
+            f"videoId={video_id}. "
+            f"Last error: {last_error}"
+        )
+    )
+
+
+# ---------------------------------------------------------
+# PLAYLIST
+# ---------------------------------------------------------
+
+@app.get(
+    "/playlist/{playlist_id}"
+)
+async def get_playlist(
+    playlist_id: str
+):
+
+    playlist_id = playlist_id.strip()
+
+    if not playlist_id:
+        raise HTTPException(
+            status_code=400,
+            detail="Missing playlist ID"
+        )
+
     try:
-        playlist = yt.get_playlist(playlist_id)
+
+        playlist = yt.get_playlist(
+            playlist_id
+        )
+
     except Exception as e:
-        raise HTTPException(status_code=404, detail=f"Playlist not found: {str(e)}")
+
+        raise HTTPException(
+            status_code=404,
+            detail=(
+                f"Playlist not found: {str(e)}"
+            )
+        )
 
     songs = []
 
-    for item in playlist.get("tracks", []):
-        v_id = item.get("videoId")
-        if not v_id:
+    for item in playlist.get(
+        "tracks",
+        []
+    ):
+
+        video_id = item.get(
+            "videoId"
+        )
+
+        if not video_id:
             continue
-        artist_name = "Unknown"
-        if item.get("artists") and len(item["artists"]) > 0:
-            artist_name = item["artists"][0].get("name", "Unknown")
 
-        thumb_url = ""
-        if item.get("thumbnails") and len(item["thumbnails"]) > 0:
-            thumb_url = item["thumbnails"][-1].get("url", "")
+        # Artist
+        artist_name = "Unknown Artist"
 
-        songs.append({
-            "videoId": v_id,
-            "title": item.get("title", "Unknown Title"),
-            "artist": artist_name,
-            "thumbnail": thumb_url,
-        })
+        artists = item.get(
+            "artists"
+        )
 
-    return {
-        "playlistName": playlist.get("title", "Playlist"),
-        "songs": songs
-    }
+        if artists and isinstance(
+            artists,
+            list
+        ):
 
-if __name__ == "__main__":
-    uvicorn.run("main:app", host="0.0.0.0", port=8000, reload=True)
+            if len(artists) > 0:
+                artist_name = artists[0].get(
+                    "name",
+                    "Unknown Artist"
+                )
+
+        # Thumbnail
