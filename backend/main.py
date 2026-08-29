@@ -211,303 +211,67 @@ async def search_songs(query: str, limit: int = 10):
 
 
 # ---------------------------------------------------------
-# STREAM EXTRACTION
+# STREAM EXTRACTION - SIMPLIFIED
 # ---------------------------------------------------------
 
-@app.get(
-    "/stream/{video_id}",
-    response_model=StreamResponse
-)
+@app.get("/stream/{video_id}", response_model=StreamResponse)
 async def get_stream(video_id: str):
-
     video_id = video_id.strip()
-
+    
     if not video_id:
-        raise HTTPException(
-            status_code=400,
-            detail="Missing video ID"
-        )
-
-    youtube_url = (
-        f"https://www.youtube.com/watch?v={video_id}"
-    )
-
-    music_url = (
-        f"https://music.youtube.com/watch?v={video_id}"
-    )
-
-    # -----------------------------------------------------
-    # Try different extractor configurations.
-    #
-    # YouTube currently changes client/PO-token
-    # requirements frequently, so fallback is intentional.
-    # -----------------------------------------------------
-
-    extractor_configs = [
-
-        # Configuration 1
-        {
-            "name": "android_vr",
-            "extractor_args": {
-                "youtube": {
-                    "player_client": ["android_vr"]
-                }
-            }
-        },
-
-        # Configuration 2
-        {
-            "name": "web_embedded",
-            "extractor_args": {
-                "youtube": {
-                    "player_client": ["web_embedded"]
-                }
-            }
-        },
-
-        # Configuration 3
-        {
-            "name": "android_vr + web_embedded",
-            "extractor_args": {
-                "youtube": {
-                    "player_client": [
-                        "android_vr",
-                        "web_embedded"
-                    ]
-                }
-            }
-        },
-
-        # Configuration 4
-        {
-            "name": "default",
-            "extractor_args": {
-                "youtube": {
-                    "player_client": ["default"]
-                }
-            }
-        }
-    ]
-
-    last_error = "Unknown extraction error"
-
-    for config in extractor_configs:
-
-        try:
-
-            ydl_opts = {
-                "quiet": True,
-                "no_warnings": True,
-
-                # SIMPLIFIED FORMAT – FIXES "not available" error
-                "format": "bestaudio",
-
-                # Do not download the media.
-                "skip_download": True,
-
-                # Avoid playlist processing.
-                "noplaylist": True,
-
-                # Do not stop if format checking fails.
-                "check_formats": False,
-
-                # Ignore minor errors
-                "ignoreerrors": True,
-
-                # Browser-like headers.
-                "http_headers": {
-                    "User-Agent": (
-                        "Mozilla/5.0 "
-                        "(Linux; Android 14) "
-                        "AppleWebKit/537.36 "
-                        "(KHTML, like Gecko) "
-                        "Chrome/124.0.0.0 "
-                        "Mobile Safari/537.36"
-                    ),
-                    "Accept-Language": "en-US,en;q=0.9"
-                },
-
-                # Current extractor configuration.
-                "extractor_args": config[
-                    "extractor_args"
-                ],
-
-                # Retry network requests.
-                "retries": 3,
-
-                # Do not download.
-                "cachedir": False,
-            }
-
-            # ----- FIX: Add cookies if available -----
-            if COOKIE_FILE:
-                ydl_opts["cookiefile"] = COOKIE_FILE
-            # ----------------------------------------
-
-            with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-
-                info = ydl.extract_info(
-                    youtube_url,
-                    download=False
-                )
-
-            if not info:
-                last_error = (
-                    f"{config['name']}: empty response"
-                )
-                continue
-
-            # Try to get direct URL
-            audio_url = info.get("url")
-
-            # If direct URL not present, search formats manually
-            if not audio_url:
-
-                formats = info.get(
-                    "formats",
-                    []
-                )
-
-                audio_formats = [
-                    f
-                    for f in formats
-                    if f.get("url")
-                    and f.get("acodec") != "none"
-                    and f.get("vcodec") == "none"
-                ]
-
-                if audio_formats:
-
-                    # Highest bitrate audio first.
-                    audio_formats.sort(
-                        key=lambda f: (
-                            f.get("abr") or 0
-                        ),
-                        reverse=True
-                    )
-
-                    audio_url = (
-                        audio_formats[0].get("url")
-                    )
-
-            if audio_url:
-
-                title = info.get(
-                    "title",
-                    f"Track {video_id}"
-                )
-
-                return StreamResponse(
-                    videoId=video_id,
-                    title=title,
-                    audioUrl=audio_url
-                )
-
-            last_error = (
-                f"{config['name']}: "
-                "no playable audio format"
-            )
-
-        except Exception as e:
-
-            last_error = (
-                f"{config['name']}: {str(e)}"
-            )
-
-            continue
-
-    # -----------------------------------------------------
-    # Final fallback: try YouTube Music URL
-    # -----------------------------------------------------
-
+        raise HTTPException(status_code=400, detail="Missing video ID")
+    
+    youtube_url = f"https://www.youtube.com/watch?v={video_id}"
+    
     try:
-
+        # Simple yt-dlp options - no complex configs
         ydl_opts = {
             "quiet": True,
             "no_warnings": True,
-            "format": "bestaudio",   # SIMPLIFIED
+            "format": "bestaudio/best",
             "skip_download": True,
             "noplaylist": True,
-            "check_formats": False,
-            "ignoreerrors": True,
-            "http_headers": {
-                "User-Agent": (
-                    "Mozilla/5.0 "
-                    "(Linux; Android 14) "
-                    "AppleWebKit/537.36 "
-                    "(KHTML, like Gecko) "
-                    "Chrome/124.0.0.0 "
-                    "Mobile Safari/537.36"
-                ),
-                "Accept-Language": "en-US,en;q=0.9"
-            },
-            "extractor_args": {
-                "youtube": {
-                    "player_client": [
-                        "android_vr"
-                    ]
-                }
-            },
-            "noplaylist": True,
         }
-
-        # ----- FIX: Add cookies if available -----
+        
+        # Add cookies if available
         if COOKIE_FILE:
             ydl_opts["cookiefile"] = COOKIE_FILE
-        # ----------------------------------------
-
+        
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-
-            info = ydl.extract_info(
-                music_url,
-                download=False
+            info = ydl.extract_info(youtube_url, download=False)
+        
+        audio_url = info.get("url")
+        
+        # If no direct URL, try to find audio format
+        if not audio_url and "formats" in info:
+            for f in info["formats"]:
+                if f.get("acodec") != "none" and f.get("vcodec") == "none":
+                    audio_url = f.get("url")
+                    if audio_url:
+                        break
+        
+        if audio_url:
+            return StreamResponse(
+                videoId=video_id,
+                title=info.get("title", f"Track {video_id}"),
+                audioUrl=audio_url
             )
-
-        if info:
-
-            audio_url = info.get("url")
-
-            if audio_url:
-
-                return StreamResponse(
-                    videoId=video_id,
-                    title=info.get(
-                        "title",
-                        f"Track {video_id}"
-                    ),
-                    audioUrl=audio_url
-                )
-
+        
+        raise HTTPException(status_code=500, detail="No audio URL found")
+        
     except Exception as e:
-
-        last_error = (
-            f"Music fallback: {str(e)}"
+        raise HTTPException(
+            status_code=500,
+            detail=f"Audio extraction failed: {str(e)}"
         )
-
-    # -----------------------------------------------------
-    # Everything failed
-    # -----------------------------------------------------
-
-    raise HTTPException(
-        status_code=500,
-        detail=(
-            "Audio extraction failed. "
-            f"videoId={video_id}. "
-            f"Last error: {last_error}"
-        )
-    )
 
 
 # ---------------------------------------------------------
 # PLAYLIST
 # ---------------------------------------------------------
 
-@app.get(
-    "/playlist/{playlist_id}"
-)
-async def get_playlist(
-    playlist_id: str
-):
+@app.get("/playlist/{playlist_id}")
+async def get_playlist(playlist_id: str):
 
     playlist_id = playlist_id.strip()
 
@@ -623,4 +387,4 @@ if __name__ == "__main__":
         host="0.0.0.0",
         port=8000,
         reload=True
-        )
+)
