@@ -6,7 +6,7 @@ import yt_dlp
 import os
 import tempfile
 import subprocess
-import time  # <-- Naya import add kiya hai
+import time
 from typing import Optional, List
 
 # ----- COOKIE FILE SETUP (ONLY FOR YT-DLP) -----
@@ -37,7 +37,6 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Use ytmusicapi WITHOUT cookies (only for search/playlist)
 yt = YTMusic()
 
 # -------------------- MODELS --------------------
@@ -114,7 +113,7 @@ async def search_songs(query: str, limit: int = 10):
         ))
     return songs
 
-# -------------------- STREAM (ONLY YT-DLP WITH COOKIES) --------------------
+# -------------------- STREAM (UNOFFICIAL WORKAROUND) --------------------
 @app.get("/stream/{video_id}", response_model=StreamResponse)
 async def get_stream(video_id: str):
     video_id = video_id.strip()
@@ -123,24 +122,29 @@ async def get_stream(video_id: str):
     
     youtube_url = f"https://www.youtube.com/watch?v={video_id}"
     
-    # Retry Logic: YouTube kabhi kabhi transient (temporary) block karta hai, isliye 3 baar try karenge
+    # Yeh unofficial combination YouTube ke bot-detection ko bypass karne ke liye hai.
+    # tv_simply aur web_safari ka use IP blocks se bachne ke liye hota hai [citation:5][citation:15].
+    official_extractor_args = (
+        "youtube:player_client=tv_simply,web_safari,android_vr,mweb;"
+        "player_skip=webpage,configs;"
+        "player_js_variant=main"
+    )
+
     for attempt in range(3):
         try:
-            # Build yt-dlp command to get audio URL
-            # -4 flag DNS issues se bachne ke liye hai
             cmd = [
                 "yt-dlp",
                 "-4",
                 "-f", "bestaudio",
                 "--get-url",
                 "--no-playlist",
-                "--remote-components", "ejs:github",
-                "--js-runtimes", "deno",
-                "--extractor-args", "youtube:player_client=tv,web",
+                "--remote-components", "ejs:github", # Deno runtime ko download karne ke liye [citation:9]
+                "--js-runtimes", "deno",             # Ye default hai, lekin explicit rakhna safe hai
+                "--extractor-args", official_extractor_args,
                 youtube_url
             ]
             if COOKIE_FILE:
-                cmd.insert(1, "--cookies")   # insert after yt-dlp
+                cmd.insert(1, "--cookies")
                 cmd.insert(2, COOKIE_FILE)
             
             result = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
@@ -151,7 +155,7 @@ async def get_stream(video_id: str):
             if not audio_url:
                 raise Exception("No audio URL returned")
             
-            # Get title using yt-dlp
+            # Title command also needs the same flags
             title_cmd = [
                 "yt-dlp",
                 "-4",
@@ -159,7 +163,7 @@ async def get_stream(video_id: str):
                 "--no-playlist",
                 "--remote-components", "ejs:github",
                 "--js-runtimes", "deno",
-                "--extractor-args", "youtube:player_client=tv,web",
+                "--extractor-args", official_extractor_args,
                 youtube_url
             ]
             if COOKIE_FILE:
@@ -176,15 +180,15 @@ async def get_stream(video_id: str):
             )
             
         except subprocess.TimeoutExpired:
-            if attempt == 2:  # Last attempt
+            if attempt == 2:
                 raise HTTPException(status_code=500, detail="yt-dlp timeout")
-            time.sleep(5) # Wait 5 seconds before retrying
+            time.sleep(5)
         
         except Exception as e:
-            # Agar error "reloaded" ya "Signature" ka hai, toh try karo warna seedha error do
+            # Ye transient error hai [citation:11], isliye 5 second ka gap leke retry karte hain.
             if attempt < 2 and ("reloaded" in str(e) or "Signature" in str(e)):
                 print(f"Attempt {attempt + 1} failed, retrying... Error: {e}")
-                time.sleep(5) # Wait 5 seconds before retrying
+                time.sleep(5)
             else:
                 raise HTTPException(status_code=500, detail=f"Audio extraction failed: {str(e)}")
 
@@ -224,4 +228,4 @@ async def get_playlist(playlist_id: str):
     return PlaylistResponse(
         playlistName=playlist.get("title", None),
         songs=songs
-)
+                )
