@@ -129,6 +129,11 @@ async def get_stream(video_id: str):
             "-f", "bestaudio",
             "--get-url",
             "--no-playlist",
+            # --- NEW FLAGS ADDED HERE ---
+            "--remote-components", "ejs:github",
+            "--js-runtimes", "deno",
+            "--extractor-args", "youtube:player_client=tv,web",
+            # -----------------------------
             youtube_url
         ]
         if COOKIE_FILE:
@@ -148,6 +153,11 @@ async def get_stream(video_id: str):
             "yt-dlp",
             "--get-title",
             "--no-playlist",
+            # --- NEW FLAGS ADDED HERE ---
+            "--remote-components", "ejs:github",
+            "--js-runtimes", "deno",
+            "--extractor-args", "youtube:player_client=tv,web",
+            # -----------------------------
             youtube_url
         ]
         if COOKIE_FILE:
@@ -204,4 +214,4 @@ async def get_playlist(playlist_id: str):
     return PlaylistResponse(
         playlistName=playlist.get("title", None),
         songs=songs
-    )
+        )
