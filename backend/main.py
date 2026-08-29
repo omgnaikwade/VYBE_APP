@@ -4,7 +4,30 @@ from pydantic import BaseModel
 from ytmusicapi import YTMusic
 import yt_dlp
 import uvicorn
+import os
+import tempfile
 from typing import Optional, List
+
+# ----- COOKIE FIX -----
+def get_cookie_file():
+    """Read cookies from environment and save to temp file"""
+    cookies_content = os.environ.get("YOUTUBE_COOKIES")
+    if not cookies_content:
+        print("⚠️ No cookies found. YouTube may block requests.")
+        return None
+    
+    try:
+        temp_file = tempfile.NamedTemporaryFile(mode='w', suffix='.txt', delete=False)
+        temp_file.write(cookies_content)
+        temp_file.close()
+        print("✅ Cookies loaded successfully!")
+        return temp_file.name
+    except Exception as e:
+        print(f"❌ Failed to load cookies: {e}")
+        return None
+
+COOKIE_FILE = get_cookie_file()
+# ----- END COOKIE FIX -----
 
 app = FastAPI(title="VYBE Music Backend API")
 
@@ -315,6 +338,11 @@ async def get_stream(video_id: str):
                 "cachedir": False,
             }
 
+            # ----- FIX: Add cookies if available -----
+            if COOKIE_FILE:
+                ydl_opts["cookiefile"] = COOKIE_FILE
+            # ----------------------------------------
+
             with yt_dlp.YoutubeDL(ydl_opts) as ydl:
 
                 info = ydl.extract_info(
@@ -425,6 +453,11 @@ async def get_stream(video_id: str):
             "noplaylist": True,
         }
 
+        # ----- FIX: Add cookies if available -----
+        if COOKIE_FILE:
+            ydl_opts["cookiefile"] = COOKIE_FILE
+        # ----------------------------------------
+
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
 
             info = ydl.extract_info(
@@ -534,3 +567,62 @@ async def get_playlist(
                 )
 
         # Thumbnail
+        thumbnail = ""
+
+        thumbnails = item.get(
+            "thumbnails"
+        )
+
+        if thumbnails and isinstance(
+            thumbnails,
+            list
+        ):
+            thumbnail = thumbnails[-1].get(
+                "url",
+                ""
+            )
+
+        # Duration
+        duration_seconds = None
+
+        if item.get(
+            "duration_seconds"
+        ):
+            duration_seconds = item.get(
+                "duration_seconds"
+            )
+
+        songs.append(
+            SearchResponse(
+                videoId=video_id,
+                title=item.get(
+                    "title",
+                    f"Track {video_id}"
+                ),
+                artist=artist_name,
+                album=None,
+                thumbnail=thumbnail,
+                duration=duration_seconds
+            )
+        )
+
+    return PlaylistResponse(
+        playlistName=playlist.get(
+            "title",
+            None
+        ),
+        songs=songs
+    )
+
+
+# ---------------------------------------------------------
+# RUN
+# ---------------------------------------------------------
+
+if __name__ == "__main__":
+    uvicorn.run(
+        "main:app",
+        host="0.0.0.0",
+        port=8000,
+        reload=True
+    )
