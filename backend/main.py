@@ -2,32 +2,29 @@ from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from ytmusicapi import YTMusic
+import yt_dlp
 import os
+import tempfile
+import subprocess
 from typing import Optional, List
 
-# ----- COOKIE SETUP (SAME AS BEFORE) -----
-def get_authenticated_yt():
-    """Authenticate using cookies from environment variable"""
+# ----- COOKIE FILE SETUP (ONLY FOR YT-DLP) -----
+def get_cookie_file():
     cookies_content = os.environ.get("YOUTUBE_COOKIES")
     if not cookies_content:
-        print("⚠️ No cookies found. Trying unauthenticated mode...")
-        return YTMusic() # Unauthenticated mode for public data
-    
+        print("⚠️ No cookies found. yt-dlp will be unauthenticated (may fail).")
+        return None
     try:
-        # Save cookies to a temporary file
-        import tempfile
         temp_file = tempfile.NamedTemporaryFile(mode='w', suffix='.txt', delete=False)
         temp_file.write(cookies_content)
         temp_file.close()
-        print("✅ Cookies loaded successfully!")
-        # Initialize YTMusic with the cookie file
-        return YTMusic(temp_file.name)
+        print("✅ Cookies saved to temp file for yt-dlp.")
+        return temp_file.name
     except Exception as e:
-        print(f"❌ Failed to load cookies: {e}")
-        return YTMusic() # Fallback to unauthenticated
+        print(f"❌ Failed to save cookies: {e}")
+        return None
 
-# Initialize the YTMusic client
-yt = get_authenticated_yt()
+COOKIE_FILE = get_cookie_file()
 
 # -------------------- FASTAPI APP --------------------
 app = FastAPI(title="VYBE Music Backend API")
@@ -39,7 +36,10 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# -------------------- RESPONSE MODELS --------------------
+# Use ytmusicapi WITHOUT cookies (only for search/playlist)
+yt = YTMusic()
+
+# -------------------- MODELS --------------------
 class SearchResponse(BaseModel):
     videoId: str
     title: str
@@ -62,7 +62,7 @@ class PlaylistResponse(BaseModel):
 async def root():
     return {"status": "ok", "service": "VYBE Music Backend API"}
 
-# -------------------- SEARCH (SAME AS BEFORE) --------------------
+# -------------------- SEARCH --------------------
 @app.get("/search", response_model=List[SearchResponse])
 async def search_songs(query: str, limit: int = 10):
     query = query.strip()
@@ -113,39 +113,49 @@ async def search_songs(query: str, limit: int = 10):
         ))
     return songs
 
-# -------------------- STREAM (NEW SIMPLE WAY) --------------------
+# -------------------- STREAM (ONLY YT-DLP WITH COOKIES) --------------------
 @app.get("/stream/{video_id}", response_model=StreamResponse)
 async def get_stream(video_id: str):
     video_id = video_id.strip()
     if not video_id:
         raise HTTPException(status_code=400, detail="Missing video ID")
     
+    youtube_url = f"https://www.youtube.com/watch?v={video_id}"
+    
     try:
-        # The simplest way to get streaming URL using ytmusicapi
-        # It returns a dict with 'streamingData' containing audio URLs
-        song_data = yt.get_song(video_id)
+        # Build yt-dlp command to get audio URL
+        cmd = [
+            "yt-dlp",
+            "-f", "bestaudio",
+            "--get-url",
+            "--no-playlist",
+            youtube_url
+        ]
+        if COOKIE_FILE:
+            cmd.insert(1, "--cookies")   # insert after yt-dlp
+            cmd.insert(2, COOKIE_FILE)
         
-        if not song_data or 'streamingData' not in song_data:
-            raise HTTPException(status_code=500, detail="No streaming data found")
+        result = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
+        if result.returncode != 0:
+            raise Exception(result.stderr)
         
-        # Extract the best audio format URL
-        audio_url = None
-        formats = song_data['streamingData'].get('formats', [])
-        adaptive_formats = song_data['streamingData'].get('adaptiveFormats', [])
-        
-        # Prefer adaptive formats (usually better quality for audio-only)
-        all_formats = adaptive_formats + formats
-        
-        for f in all_formats:
-            if f.get('url') and f.get('mimeType', '').startswith('audio/'):
-                audio_url = f.get('url')
-                break
-        
+        audio_url = result.stdout.strip()
         if not audio_url:
-            raise HTTPException(status_code=500, detail="No audio URL found in formats")
+            raise Exception("No audio URL returned")
         
-        # Get title from the response
-        title = song_data.get('videoDetails', {}).get('title', f"Track {video_id}")
+        # Get title using yt-dlp
+        title_cmd = [
+            "yt-dlp",
+            "--get-title",
+            "--no-playlist",
+            youtube_url
+        ]
+        if COOKIE_FILE:
+            title_cmd.insert(1, "--cookies")
+            title_cmd.insert(2, COOKIE_FILE)
+        
+        title_result = subprocess.run(title_cmd, capture_output=True, text=True, timeout=30)
+        title = title_result.stdout.strip() if title_result.returncode == 0 else f"Track {video_id}"
         
         return StreamResponse(
             videoId=video_id,
@@ -153,13 +163,12 @@ async def get_stream(video_id: str):
             audioUrl=audio_url
         )
         
+    except subprocess.TimeoutExpired:
+        raise HTTPException(status_code=500, detail="yt-dlp timeout")
     except Exception as e:
-        raise HTTPException(
-            status_code=500,
-            detail=f"Audio extraction failed: {str(e)}"
-        )
+        raise HTTPException(status_code=500, detail=f"Audio extraction failed: {str(e)}")
 
-# -------------------- PLAYLIST (SAME AS BEFORE) --------------------
+# -------------------- PLAYLIST (unauthenticated) --------------------
 @app.get("/playlist/{playlist_id}")
 async def get_playlist(playlist_id: str):
     playlist_id = playlist_id.strip()
@@ -195,4 +204,4 @@ async def get_playlist(playlist_id: str):
     return PlaylistResponse(
         playlistName=playlist.get("title", None),
         songs=songs
-)
+    )
