@@ -36,12 +36,12 @@ object NotificationHelper {
     }
 
     fun showMusicNotification(
-        context: Context,
-        song: Song,
-        isPlaying: Boolean,
-        playPauseIntent: PendingIntent?,
-        previousIntent: PendingIntent?,
-        nextIntent: PendingIntent?
+    context: Context,
+    song: Song,
+    isPlaying: Boolean,
+    playPauseIntent: PendingIntent? = null,
+    previousIntent: PendingIntent? = null,
+    nextIntent: PendingIntent? = null
     ) {
         createChannel(context)
 
