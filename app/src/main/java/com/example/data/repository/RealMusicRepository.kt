@@ -488,7 +488,7 @@ class RealMusicRepository(
 
             val songs =
                 musicBackendApi.searchMusic(
-                    query = "Trending Dance EDM Party",
+                    query = "Trending Bollywood Dance Songs",
                     limit = 12
                 )
 
