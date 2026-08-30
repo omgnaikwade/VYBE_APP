@@ -6,6 +6,9 @@ import android.media.MediaPlayer
 import android.net.Uri
 import android.util.Log
 import com.example.service.NotificationHelper
+import android.app.PendingIntent
+import android.content.Intent
+import com.example.MainActivity
 import com.example.data.api.MusicBackendApi
 import com.example.data.model.AudioQuality
 import com.example.data.model.PlaybackState
