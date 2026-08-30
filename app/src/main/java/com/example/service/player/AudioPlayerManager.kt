@@ -5,6 +5,7 @@ import android.content.Context
 import android.content.Intent
 import android.media.AudioAttributes
 import android.media.MediaPlayer
+import android.media.session.MediaSession
 import android.net.Uri
 import android.os.Build
 import android.util.Log
@@ -36,6 +37,7 @@ class AudioPlayerManager(
 
     init {
         PlayerHolder.manager = this
+        initMediaSession()
     }
 
     private val _playbackState = MutableStateFlow(PlaybackState())
@@ -45,6 +47,7 @@ class AudioPlayerManager(
     private var mediaPlayer: MediaPlayer? = null
     private var progressTickerJob: Job? = null
     private var playbackJob: Job? = null
+    private var mediaSession: MediaSession? = null
 
     private val musicBackendApi = MusicBackendApi()
 
@@ -63,6 +66,18 @@ class AudioPlayerManager(
         "Accept" to "*/*",
         "Accept-Encoding" to "identity;q=1, *;q=0"
     )
+
+    private fun initMediaSession() {
+        if (mediaSession == null) {
+            mediaSession = MediaSession(context, "VybeMusicSession").apply {
+                setFlags(
+                    MediaSession.FLAG_HANDLES_MEDIA_BUTTONS or
+                            MediaSession.FLAG_HANDLES_TRANSPORT_CONTROLS
+                )
+                isActive = true
+            }
+        }
+    }
 
     fun initializeWithSong(
         song: Song,
@@ -133,12 +148,12 @@ class AudioPlayerManager(
             )
         }
 
-        showNotification(song)
+        showNotification(song, true)
 
         startAudioStream(song)
     }
 
-    private fun showNotification(song: Song) {
+    private fun showNotification(song: Song, isPlaying: Boolean) {
 
         val flags =
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
@@ -190,7 +205,8 @@ class AudioPlayerManager(
         NotificationHelper.showMusicNotification(
             context = context,
             song = song,
-            isPlaying = true,
+            isPlaying = isPlaying,
+            mediaSessionToken = mediaSession?.sessionToken,
             playPauseIntent = playPauseIntent,
             previousIntent = previousIntent,
             nextIntent = nextIntent
@@ -425,6 +441,8 @@ class AudioPlayerManager(
 
                 stopProgressTicker()
 
+                showNotification(currentSong, false)
+
             } else {
 
                 player.start()
@@ -434,6 +452,8 @@ class AudioPlayerManager(
                 }
 
                 startProgressTicker()
+
+                showNotification(currentSong, true)
             }
 
         } catch (e: Exception) {
@@ -524,7 +544,7 @@ class AudioPlayerManager(
             )
         }
 
-        showNotification(nextSong)
+        showNotification(nextSong, true)
 
         startAudioStream(nextSong)
     }
@@ -569,7 +589,7 @@ class AudioPlayerManager(
             )
         }
 
-        showNotification(previousSong)
+        showNotification(previousSong, true)
 
         startAudioStream(previousSong)
     }
@@ -781,7 +801,7 @@ class AudioPlayerManager(
                 queue = queue,
                 currentQueueIndex =
                     currentIndex.coerceIn(
-                        0,
+                    0,
                         (queue.size - 1)
                             .coerceAtLeast(0)
                     )
@@ -810,9 +830,7 @@ class AudioPlayerManager(
 
                             if (player.isPlaying) {
 
-                                
-                        
-                          val position =
+                                val position =
                                     player.currentPosition / 1000
 
                                 val duration =
