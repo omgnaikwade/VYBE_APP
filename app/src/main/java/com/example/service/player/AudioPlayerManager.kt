@@ -34,7 +34,6 @@ class AudioPlayerManager(
   private var progressTickerJob: Job? = null
   private var playbackJob: Job? = null
   private val musicBackendApi = MusicBackendApi()
-  private val notificationHelper = NotificationHelper(context)
 
   // Track retry count per song to avoid infinite retry loops
   private var currentSongRetryCount = 0
