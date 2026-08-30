@@ -100,7 +100,7 @@ dependencies {
   implementation(libs.androidx.compose.ui)
   implementation(libs.androidx.compose.ui.graphics)
   implementation(libs.androidx.compose.ui.tooling.preview)
-  implementation(libs.androidx.core.ktx)
+  implementation("androidx.core:core-ktx:1.18.0")
 
   // Lifecycle / Navigation
   implementation(libs.androidx.lifecycle.runtime.compose)
@@ -131,7 +131,7 @@ dependencies {
 
   // Tests
   testImplementation(libs.androidx.compose.ui.test.junit4)
-  testImplementation(libs.androidx.core)
+  testImplementation("androidx.test:core:1.6.1")
   testImplementation(libs.androidx.junit)
   testImplementation(libs.junit)
   testImplementation(libs.kotlinx.coroutines.test)
