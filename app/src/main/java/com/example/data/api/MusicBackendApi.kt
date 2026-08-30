@@ -89,7 +89,7 @@ class MusicBackendApi(
          * Example:
          * http://192.168.1.5:8000/
          */
-        const val DEFAULT_BASE_URL = "http://10.0.2.2:8000/"
+        const val DEFAULT_BASE_URL = "https://vybe-app-h5h8.onrender.com/"
 
         @Volatile
         private var globalBaseUrl: String =
