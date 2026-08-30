@@ -143,9 +143,17 @@ class RealMusicRepository(
         scope.launch {
             val userId = getUserId() ?: return@launch
 
-            loadFavoritesFromSupabase(userId)
-            loadHistoryFromSupabase(userId)
-            loadPlaylistsFromSupabase(userId)
+            try {
+                loadFavoritesFromSupabase(userId)
+                loadHistoryFromSupabase(userId)
+                loadPlaylistsFromSupabase(userId)
+            } catch (e: Exception) {
+                Log.e(
+                    "RealMusicRepo",
+                    "Error loading Supabase user data",
+                    e
+                )
+            }
         }
     }
 
@@ -174,12 +182,21 @@ class RealMusicRepository(
             _favoriteSongs.value = songs
             storage.saveFavorites(songs)
 
-            _discoverSongs.value = markFavorites(_discoverSongs.value)
-            _biggestHits.value = markFavorites(_biggestHits.value)
-            _danceHits.value = markFavorites(_danceHits.value)
+            _discoverSongs.value =
+                markFavorites(_discoverSongs.value)
+
+            _biggestHits.value =
+                markFavorites(_biggestHits.value)
+
+            _danceHits.value =
+                markFavorites(_danceHits.value)
 
         } catch (e: Exception) {
-            Log.e("RealMusicRepo", "Failed loading favorites", e)
+            Log.e(
+                "RealMusicRepo",
+                "Failed loading favorites",
+                e
+            )
         }
     }
 
@@ -208,7 +225,11 @@ class RealMusicRepository(
             storage.saveHistory(_listeningHistory.value)
 
         } catch (e: Exception) {
-            Log.e("RealMusicRepo", "Failed loading history", e)
+            Log.e(
+                "RealMusicRepo",
+                "Failed loading history",
+                e
+            )
         }
     }
 
@@ -226,6 +247,7 @@ class RealMusicRepository(
             val result = mutableListOf<Playlist>()
 
             for (playlist in playlistRows) {
+
                 val songRows = supabase
                     .from("playlist_songs")
                     .select {
@@ -250,7 +272,8 @@ class RealMusicRepository(
                         id = playlist.id,
                         title = playlist.name,
                         description = "",
-                        coverUrl = songs.firstOrNull()?.artworkUrl ?: "",
+                        coverUrl =
+                            songs.firstOrNull()?.artworkUrl ?: "",
                         songCount = songs.size,
                         songs = songs,
                         isUserCreated = true,
@@ -264,7 +287,11 @@ class RealMusicRepository(
             storage.savePlaylists(result)
 
         } catch (e: Exception) {
-            Log.e("RealMusicRepo", "Failed loading playlists", e)
+            Log.e(
+                "RealMusicRepo",
+                "Failed loading playlists",
+                e
+            )
         }
     }
 
@@ -283,12 +310,20 @@ class RealMusicRepository(
 
                 if (songs.isNotEmpty()) {
                     val marked = markFavorites(songs)
+
                     _discoverSongs.value = marked
+
                     storage.saveDiscoverCache(marked)
+
                     updatePlaylistsAndArtists()
                 }
+
             } catch (e: Exception) {
-                Log.e("RealMusicRepo", "Error loading discover songs", e)
+                Log.e(
+                    "RealMusicRepo",
+                    "Error loading discover songs",
+                    e
+                )
             }
         }
 
@@ -301,12 +336,20 @@ class RealMusicRepository(
 
                 if (songs.isNotEmpty()) {
                     val marked = markFavorites(songs)
+
                     _biggestHits.value = marked
+
                     storage.saveBiggestHitsCache(marked)
+
                     updatePlaylistsAndArtists()
                 }
+
             } catch (e: Exception) {
-                Log.e("RealMusicRepo", "Error loading biggest hits", e)
+                Log.e(
+                    "RealMusicRepo",
+                    "Error loading biggest hits",
+                    e
+                )
             }
         }
 
@@ -319,12 +362,20 @@ class RealMusicRepository(
 
                 if (songs.isNotEmpty()) {
                     val marked = markFavorites(songs)
+
                     _danceHits.value = marked
+
                     storage.saveDanceHitsCache(marked)
+
                     updatePlaylistsAndArtists()
                 }
+
             } catch (e: Exception) {
-                Log.e("RealMusicRepo", "Error loading dance hits", e)
+                Log.e(
+                    "RealMusicRepo",
+                    "Error loading dance hits",
+                    e
+                )
             }
         }
     }
@@ -347,8 +398,10 @@ class RealMusicRepository(
                 Playlist(
                     id = "pl_trending_now",
                     title = "VYBE Top 50",
-                    description = "The hottest global and trending chartbusters updated daily.",
-                    coverUrl = discoverList.firstOrNull()?.artworkUrl ?: "",
+                    description =
+                        "The hottest global and trending chartbusters updated daily.",
+                    coverUrl =
+                        discoverList.firstOrNull()?.artworkUrl ?: "",
                     songCount = discoverList.size,
                     songs = discoverList,
                     gradientStart = 0xFF8B5CF6,
@@ -362,8 +415,10 @@ class RealMusicRepository(
                 Playlist(
                     id = "pl_bollywood_butter",
                     title = "Bollywood Butter",
-                    description = "Pure Bollywood magic featuring top chart hits and golden melodies.",
-                    coverUrl = hitsList.firstOrNull()?.artworkUrl ?: "",
+                    description =
+                        "Pure Bollywood magic featuring top chart hits and golden melodies.",
+                    coverUrl =
+                        hitsList.firstOrNull()?.artworkUrl ?: "",
                     songCount = hitsList.size,
                     songs = hitsList,
                     gradientStart = 0xFFFF2D75,
@@ -377,8 +432,10 @@ class RealMusicRepository(
                 Playlist(
                     id = "pl_club_dance",
                     title = "Club Hyperdrive",
-                    description = "High octane EDM, club rhythms and heart-pumping beats.",
-                    coverUrl = danceList.firstOrNull()?.artworkUrl ?: "",
+                    description =
+                        "High octane EDM, club rhythms and heart-pumping beats.",
+                    coverUrl =
+                        danceList.firstOrNull()?.artworkUrl ?: "",
                     songCount = danceList.size,
                     songs = danceList,
                     gradientStart = 0xFF06B6D4,
@@ -389,10 +446,14 @@ class RealMusicRepository(
 
         _trendingPlaylists.value = playlists
 
-        val allSongs = discoverList + hitsList + danceList
-        val artistMap = mutableMapOf<String, String>()
+        val allSongs =
+            discoverList + hitsList + danceList
+
+        val artistMap =
+            mutableMapOf<String, String>()
 
         allSongs.forEach { song ->
+
             val mainArtist =
                 song.artist
                     .split(",", "&", "feat.", "ft.")
@@ -405,7 +466,8 @@ class RealMusicRepository(
                 !artistMap.containsKey(mainArtist) &&
                 song.artworkUrl.isNotBlank()
             ) {
-                artistMap[mainArtist] = song.artworkUrl
+                artistMap[mainArtist] =
+                    song.artworkUrl
             }
         }
 
@@ -414,7 +476,8 @@ class RealMusicRepository(
                 .take(8)
                 .map { (name, artUrl) ->
                     Artist(
-                        id = "artist_${Math.abs(name.hashCode())}",
+                        id =
+                            "artist_${Math.abs(name.hashCode())}",
                         name = name,
                         avatarUrl = artUrl,
                         monthlyListeners = "",
@@ -423,7 +486,8 @@ class RealMusicRepository(
                 }
 
         if (dynamicArtists.isNotEmpty()) {
-            _topArtists.value = dynamicArtists
+            _topArtists.value =
+                dynamicArtists
         }
     }
 
@@ -431,67 +495,115 @@ class RealMusicRepository(
     // FAVORITES
     // ---------------------------------------------------------
 
-    private fun markFavorites(songs: List<Song>): List<Song> {
-        val favIds = _favoriteSongs.value
-            .map { it.id }
-            .toSet()
+    private fun markFavorites(
+        songs: List<Song>
+    ): List<Song> {
+
+        val favIds =
+            _favoriteSongs.value
+                .map { it.id }
+                .toSet()
 
         return songs.map {
-            it.copy(isLiked = favIds.contains(it.id))
+            it.copy(
+                isLiked =
+                    favIds.contains(it.id)
+            )
         }
     }
 
     override fun getFavoriteSongs(): Flow<List<Song>> =
         _favoriteSongs.asStateFlow()
 
-    override suspend fun toggleFavorite(song: Song): Boolean {
+    override suspend fun toggleFavorite(
+        song: Song
+    ): Boolean {
 
         val currentFavs =
             _favoriteSongs.value.toMutableList()
 
         val existingIndex =
-            currentFavs.indexOfFirst { it.id == song.id }
+            currentFavs.indexOfFirst {
+                it.id == song.id
+            }
 
         val isNowLiked: Boolean
 
         if (existingIndex >= 0) {
+
             currentFavs.removeAt(existingIndex)
+
             isNowLiked = false
+
             deleteFavoriteFromSupabase(song.id)
+
         } else {
-            currentFavs.add(0, song.copy(isLiked = true))
+
+            currentFavs.add(
+                0,
+                song.copy(isLiked = true)
+            )
+
             isNowLiked = true
-            saveFavoriteToSupabase(song.copy(isLiked = true))
+
+            saveFavoriteToSupabase(
+                song.copy(isLiked = true)
+            )
         }
 
-        _favoriteSongs.value = currentFavs
-        storage.saveFavorites(currentFavs)
+        _favoriteSongs.value =
+            currentFavs
 
-        _discoverSongs.value = markFavorites(_discoverSongs.value)
-        _biggestHits.value = markFavorites(_biggestHits.value)
-        _danceHits.value = markFavorites(_danceHits.value)
+        storage.saveFavorites(
+            currentFavs
+        )
 
-        updateLikeInteraction(song.id, isNowLiked)
+        _discoverSongs.value =
+            markFavorites(
+                _discoverSongs.value
+            )
+
+        _biggestHits.value =
+            markFavorites(
+                _biggestHits.value
+            )
+
+        _danceHits.value =
+            markFavorites(
+                _danceHits.value
+            )
+
+        updateLikeInteraction(
+            song.id,
+            isNowLiked
+        )
 
         return isNowLiked
     }
 
-    private suspend fun saveFavoriteToSupabase(song: Song) {
+    private suspend fun saveFavoriteToSupabase(
+        song: Song
+    ) {
 
-        val userId = getUserId() ?: return
+        val userId =
+            getUserId() ?: return
 
         try {
-            val existing = supabase
-                .from("favorites")
-                .select {
-                    filter {
-                        eq("user_id", userId)
-                        eq("song_id", song.id)
-                    }
-                }
-                .decodeList<FavoriteRow>()
 
-            if (existing.isNotEmpty()) return
+            val existing =
+                supabase
+                    .from("favorites")
+                    .select {
+                        filter {
+                            eq("user_id", userId)
+                            eq("song_id", song.id)
+                        }
+                    }
+                    .decodeList<FavoriteRow>()
+
+            if (existing.isNotEmpty()) {
+                return
+            }
 
             supabase
                 .from("favorites")
@@ -507,15 +619,24 @@ class RealMusicRepository(
                 )
 
         } catch (e: Exception) {
-            Log.e("RealMusicRepo", "Failed saving favorite", e)
+
+            Log.e(
+                "RealMusicRepo",
+                "Failed saving favorite",
+                e
+            )
         }
     }
 
-    private suspend fun deleteFavoriteFromSupabase(songId: String) {
+    private suspend fun deleteFavoriteFromSupabase(
+        songId: String
+    ) {
 
-        val userId = getUserId() ?: return
+        val userId =
+            getUserId() ?: return
 
         try {
+
             supabase
                 .from("favorites")
                 .delete {
@@ -526,7 +647,12 @@ class RealMusicRepository(
                 }
 
         } catch (e: Exception) {
-            Log.e("RealMusicRepo", "Failed deleting favorite", e)
+
+            Log.e(
+                "RealMusicRepo",
+                "Failed deleting favorite",
+                e
+            )
         }
     }
 
@@ -537,28 +663,47 @@ class RealMusicRepository(
     override fun getListeningHistory(): Flow<List<Song>> =
         _listeningHistory.asStateFlow()
 
-    override suspend fun addToHistory(song: Song) {
+    override suspend fun addToHistory(
+        song: Song
+    ) {
 
         val currentHistory =
-            _listeningHistory.value.toMutableList()
+            _listeningHistory.value
+                .toMutableList()
 
-        currentHistory.removeAll { it.id == song.id }
-        currentHistory.add(0, song)
+        currentHistory.removeAll {
+            it.id == song.id
+        }
 
-        val trimmed = currentHistory.take(50)
+        currentHistory.add(
+            0,
+            song
+        )
 
-        _listeningHistory.value = trimmed
-        storage.saveHistory(trimmed)
+        val trimmed =
+            currentHistory.take(50)
+
+        _listeningHistory.value =
+            trimmed
+
+        storage.saveHistory(
+            trimmed
+        )
 
         saveHistoryToSupabase(song)
+
         incrementPlayCount(song.id)
     }
 
-    private suspend fun saveHistoryToSupabase(song: Song) {
+    private suspend fun saveHistoryToSupabase(
+        song: Song
+    ) {
 
-        val userId = getUserId() ?: return
+        val userId =
+            getUserId() ?: return
 
         try {
+
             supabase
                 .from("listening_history")
                 .insert(
@@ -566,64 +711,4 @@ class RealMusicRepository(
                         userId = userId,
                         songId = song.id,
                         songName = song.title,
-                        artistName = song.artist,
-                        albumName = song.album,
-                        imageUrl = song.artworkUrl
-                    )
-                )
-
-        } catch (e: Exception) {
-            Log.e("RealMusicRepo", "Failed saving history", e)
-        }
-    }
-
-    // ---------------------------------------------------------
-    // SONG INTERACTIONS
-    // ---------------------------------------------------------
-
-    private suspend fun incrementPlayCount(songId: String) {
-
-        val userId = getUserId() ?: return
-
-        try {
-            val rows = supabase
-                .from("song_interactions")
-                .select {
-                    filter {
-                        eq("user_id", userId)
-                        eq("song_id", songId)
-                    }
-                }
-                .decodeList<InteractionRow>()
-
-            if (rows.isNotEmpty()) {
-
-                val row = rows.first()
-                val rowId = row.id ?: return
-
-                supabase
-                    .from("song_interactions")
-                    .update(
-                        {
-                            set(
-                                "play_count",
-                                row.playCount + 1
-                            )
-                        }
-                    ) {
-                        filter {
-                            eq("id", rowId)
-                        }
-                    }
-
-            } else {
-
-                supabase
-                    .from("song_interactions")
-                    .insert(
-                        InteractionRow(
-                            userId = userId,
-                            songId = songId,
-                            playCount = 1,
-                            skipCount = 0,
-                            lik
+                        artistNam
