@@ -694,37 +694,34 @@ class RealMusicRepository(
 
         incrementPlayCount(song.id)
     }
+private suspend fun saveHistoryToSupabase(
+    song: Song
+) {
+    val userId = getUserId() ?: return
 
-    private suspend fun saveHistoryToSupabase(
-        song: Song
-    ) {
-
-        val userId =
-            getUserId() ?: return
-
-        try {
-
-            supabase
-                .from("listening_history")
-                .insert(
-                    HistoryRow(
-                        userId = userId,
-                        songId = song.id,
-                        songName = song.title,
-                                            artistName = song.artist,
+    try {
+        supabase
+            .from("listening_history")
+            .insert(
+                HistoryRow(
+                    userId = userId,
+                    songId = song.id,
+                    songName = song.title,
+                    artistName = song.artist,
                     albumName = song.album,
                     imageUrl = song.artworkUrl
                 )
             )
 
-        } catch (e: Exception) {
-            Log.e(
-                "RealMusicRepo",
-                "Failed saving history",
-                e
-            )
-        }
+    } catch (e: Exception) {
+        Log.e(
+            "RealMusicRepo",
+            "Failed saving history",
+            e
+        )
     }
+}
+    pr
 
     // ---------------------------------------------------------
     // SONG INTERACTIONS
