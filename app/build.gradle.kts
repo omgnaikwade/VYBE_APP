@@ -101,6 +101,7 @@ dependencies {
   implementation(libs.androidx.compose.ui.graphics)
   implementation(libs.androidx.compose.ui.tooling.preview)
   implementation("androidx.core:core-ktx:1.18.0")
+  implementation("androidx.media:media:1.7.0")
 
   // Lifecycle / Navigation
   implementation(libs.androidx.lifecycle.runtime.compose)
