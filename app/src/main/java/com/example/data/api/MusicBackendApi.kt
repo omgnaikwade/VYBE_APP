@@ -93,7 +93,7 @@ class MusicBackendApi(
 
         @Volatile
         private var globalBaseUrl: String =
-            sanitizeBaseUrl(initialBaseUrl)
+            DEFAULT_BASE_URL
 
         private fun sanitizeBaseUrl(url: String): String {
             val cleanUrl = url.trim()
@@ -118,6 +118,14 @@ class MusicBackendApi(
                 "Backend Base URL updated to: $globalBaseUrl"
             )
         }
+    }
+
+    /*
+     * Apply the constructor-provided backend URL after the
+     * companion object's static initialization is complete.
+     */
+    init {
+        globalBaseUrl = sanitizeBaseUrl(initialBaseUrl)
     }
 
     private val moshi = Moshi.Builder()
