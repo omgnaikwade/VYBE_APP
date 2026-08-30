@@ -88,6 +88,11 @@ class AudioPlayerManager(
       )
     }
 
+     NotificationHelper.showMusicNotification(
+    context = context,
+    song = song,
+    isPlaying = true
+)
     startAudioStream(song, isRetry = false)
   }
 
