@@ -3,6 +3,7 @@ import com.google.gms.googleservices.GoogleServicesPlugin.MissingGoogleServicesS
 plugins {
   alias(libs.plugins.android.application)
   alias(libs.plugins.kotlin.compose)
+  alias(libs.plugins.kotlin.serialization)
   // alias(libs.plugins.google.devtools.ksp)
   alias(libs.plugins.roborazzi)
   alias(libs.plugins.secrets)
@@ -44,8 +45,6 @@ android {
       signingConfig = signingConfigs.getByName("release")
     }
 
-    // Use Android's default debug signing configuration.
-    // No custom debug.keystore is required.
     debug {
       // Default debug signing is used automatically.
     }
@@ -73,8 +72,6 @@ android {
   }
 }
 
-// Configure the Secrets Gradle Plugin to use .env and .env.example files
-// to match the convention used in Web projects.
 secrets {
   propertiesFileName = ".env"
   defaultPropertiesFileName = ".env.example"
@@ -85,20 +82,18 @@ googleServices {
   missingGoogleServicesStrategy = MissingGoogleServicesStrategy.WARN
 }
 
-// Some unused dependencies are commented out below instead of being removed.
-// This makes it easy to add them back in the future if needed.
 dependencies {
   implementation(platform(libs.androidx.compose.bom))
   implementation(platform(libs.firebase.bom))
 
-  // implementation(libs.accompanist.permissions)
+  // Supabase
+  implementation(platform(libs.supabase.bom))
+  implementation(libs.supabase.auth)
+  implementation(libs.supabase.postgrest)
+  implementation(libs.ktor.client.android)
+
+  // AndroidX / Compose
   implementation(libs.androidx.activity.compose)
-
-  // implementation(libs.androidx.camera.camera2)
-  // implementation(libs.androidx.camera.core)
-  // implementation(libs.androidx.camera.lifecycle)
-  // implementation(libs.androidx.camera.view)
-
   implementation(libs.androidx.compose.material.icons.core)
   implementation(libs.androidx.compose.material.icons.extended)
   implementation(libs.androidx.compose.material3)
@@ -107,38 +102,34 @@ dependencies {
   implementation(libs.androidx.compose.ui.tooling.preview)
   implementation(libs.androidx.core.ktx)
 
-  // implementation(libs.androidx.datastore.preferences)
-
+  // Lifecycle / Navigation
   implementation(libs.androidx.lifecycle.runtime.compose)
   implementation(libs.androidx.lifecycle.runtime.ktx)
   implementation(libs.androidx.lifecycle.viewmodel.compose)
   implementation(libs.androidx.navigation.compose)
+
+  // Room
   implementation(libs.androidx.room.ktx)
   implementation(libs.androidx.room.runtime)
+
+  // Images / Networking
   implementation(libs.coil.compose)
   implementation(libs.converter.moshi)
-  implementation(libs.firebase.ai)
-
-  // Uncomment to use Firestore:
-  // implementation(libs.firebase.firestore)
-
-  // Uncomment ALL FOUR of the following dependencies together to use Firebase Auth
-  // and Google Sign-In via Credential Manager:
-  // implementation(libs.firebase.auth)
-  // implementation(libs.androidx.credentials)
-  // implementation(libs.androidx.credentials.play.services)
-  // implementation(libs.googleid)
-
-  implementation(libs.firebase.appcheck.recaptcha)
-  implementation(libs.firebase.appcheck.debug)
-  implementation(libs.kotlinx.coroutines.android)
-  implementation(libs.kotlinx.coroutines.core)
   implementation(libs.logging.interceptor)
   implementation(libs.moshi.kotlin)
   implementation(libs.okhttp)
-  // implementation(libs.play.services.location)
   implementation(libs.retrofit)
 
+  // Firebase
+  implementation(libs.firebase.ai)
+  implementation(libs.firebase.appcheck.recaptcha)
+  implementation(libs.firebase.appcheck.debug)
+
+  // Coroutines
+  implementation(libs.kotlinx.coroutines.android)
+  implementation(libs.kotlinx.coroutines.core)
+
+  // Tests
   testImplementation(libs.androidx.compose.ui.test.junit4)
   testImplementation(libs.androidx.core)
   testImplementation(libs.androidx.junit)
@@ -157,7 +148,4 @@ dependencies {
 
   debugImplementation(libs.androidx.compose.ui.test.manifest)
   debugImplementation(libs.androidx.compose.ui.tooling)
-
-  // "ksp"(libs.androidx.room.compiler)
-  // "ksp"(libs.moshi.kotlin.codegen)
 }
