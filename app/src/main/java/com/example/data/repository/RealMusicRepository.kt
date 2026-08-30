@@ -9,6 +9,7 @@ import com.example.data.model.Playlist
 import com.example.data.model.Song
 import com.example.data.storage.LocalMusicStorage
 import com.example.supabase
+import io.github.jan.supabase.auth.auth
 import io.github.jan.supabase.postgrest.from
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -721,7 +722,7 @@ private suspend fun saveHistoryToSupabase(
         )
     }
 }
-    pr
+    
 
     // ---------------------------------------------------------
     // SONG INTERACTIONS
