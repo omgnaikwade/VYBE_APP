@@ -711,4 +711,494 @@ class RealMusicRepository(
                         userId = userId,
                         songId = song.id,
                         songName = song.title,
-                        artistNam
+                                            artistName = song.artist,
+                    albumName = song.album,
+                    imageUrl = song.artworkUrl
+                )
+            )
+
+        } catch (e: Exception) {
+            Log.e(
+                "RealMusicRepo",
+                "Failed saving history",
+                e
+            )
+        }
+    }
+
+    // ---------------------------------------------------------
+    // SONG INTERACTIONS
+    // ---------------------------------------------------------
+
+    private suspend fun incrementPlayCount(
+        songId: String
+    ) {
+        val userId = getUserId() ?: return
+
+        try {
+            val rows = supabase
+                .from("song_interactions")
+                .select {
+                    filter {
+                        eq("user_id", userId)
+                        eq("song_id", songId)
+                    }
+                }
+                .decodeList<InteractionRow>()
+
+            if (rows.isNotEmpty()) {
+                val row = rows.first()
+                val rowId = row.id ?: return
+
+                supabase
+                    .from("song_interactions")
+                    .update(
+                        {
+                            set(
+                                "play_count",
+                                row.playCount + 1
+                            )
+                        }
+                    ) {
+                        filter {
+                            eq("id", rowId)
+                        }
+                    }
+            } else {
+                supabase
+                    .from("song_interactions")
+                    .insert(
+                        InteractionRow(
+                            userId = userId,
+                            songId = songId,
+                            playCount = 1,
+                            skipCount = 0,
+                            likeCount = 0
+                        )
+                    )
+            }
+
+        } catch (e: Exception) {
+            Log.e(
+                "RealMusicRepo",
+                "Failed updating play count",
+                e
+            )
+        }
+    }
+
+    private suspend fun updateLikeInteraction(
+        songId: String,
+        liked: Boolean
+    ) {
+        val userId = getUserId() ?: return
+
+        try {
+            val rows = supabase
+                .from("song_interactions")
+                .select {
+                    filter {
+                        eq("user_id", userId)
+                        eq("song_id", songId)
+                    }
+                }
+                .decodeList<InteractionRow>()
+
+            if (rows.isNotEmpty()) {
+                val row = rows.first()
+                val rowId = row.id ?: return
+
+                val newLikeCount =
+                    if (liked) {
+                        row.likeCount + 1
+                    } else {
+                        maxOf(0, row.likeCount - 1)
+                    }
+
+                supabase
+                    .from("song_interactions")
+                    .update(
+                        {
+                            set(
+                                "like_count",
+                                newLikeCount
+                            )
+                        }
+                    ) {
+                        filter {
+                            eq("id", rowId)
+                        }
+                    }
+
+            } else if (liked) {
+                supabase
+                    .from("song_interactions")
+                    .insert(
+                        InteractionRow(
+                            userId = userId,
+                            songId = songId,
+                            playCount = 0,
+                            skipCount = 0,
+                            likeCount = 1
+                        )
+                    )
+            }
+
+        } catch (e: Exception) {
+            Log.e(
+                "RealMusicRepo",
+                "Failed updating like interaction",
+                e
+            )
+        }
+    }
+
+    // ---------------------------------------------------------
+    // PLAYLISTS
+    // ---------------------------------------------------------
+
+    override fun getUserPlaylists(): Flow<List<Playlist>> =
+        _userPlaylists.asStateFlow()
+
+    override suspend fun createPlaylist(
+        title: String,
+        description: String
+    ) {
+        val cleanTitle = title.trim()
+
+        if (cleanTitle.isBlank()) return
+
+        val userId = getUserId()
+
+        if (userId == null) {
+            val newPlaylist = Playlist(
+                id = "user_pl_${System.currentTimeMillis()}",
+                title = cleanTitle,
+                description = description.trim(),
+                coverUrl = "",
+                songCount = 0,
+                songs = emptyList(),
+                isUserCreated = true,
+                gradientStart = 0xFF3B82F6,
+                gradientEnd = 0xFF8B5CF6
+            )
+
+            val updated =
+                listOf(newPlaylist) + _userPlaylists.value
+
+            _userPlaylists.value = updated
+            storage.savePlaylists(updated)
+            return
+        }
+
+        try {
+            val playlistId = UUID.randomUUID().toString()
+
+            supabase
+                .from("playlists")
+                .insert(
+                    PlaylistRow(
+                        id = playlistId,
+                        userId = userId,
+                        name = cleanTitle
+                    )
+                )
+
+            val newPlaylist = Playlist(
+                id = playlistId,
+                title = cleanTitle,
+                description = description.trim(),
+                coverUrl = "",
+                songCount = 0,
+                songs = emptyList(),
+                isUserCreated = true,
+                gradientStart = 0xFF3B82F6,
+                gradientEnd = 0xFF8B5CF6
+            )
+
+            val updated =
+                listOf(newPlaylist) + _userPlaylists.value
+
+            _userPlaylists.value = updated
+            storage.savePlaylists(updated)
+
+        } catch (e: Exception) {
+            Log.e(
+                "RealMusicRepo",
+                "Failed creating playlist",
+                e
+            )
+        }
+    }
+
+    override suspend fun addSongToPlaylist(
+        playlistId: String,
+        song: Song
+    ) {
+        val currentPlaylists =
+            _userPlaylists.value.toMutableList()
+
+        val index =
+            currentPlaylists.indexOfFirst {
+                it.id == playlistId
+            }
+
+        if (index < 0) return
+
+        val playlist = currentPlaylists[index]
+
+        val songs =
+            playlist.songs.toMutableList()
+
+        if (songs.any { it.id == song.id }) {
+            return
+        }
+
+        val userId = getUserId()
+
+        if (userId != null) {
+            try {
+                supabase
+                    .from("playlist_songs")
+                    .insert(
+                        PlaylistSongRow(
+                            playlistId = playlistId,
+                            songId = song.id,
+                            songName = song.title,
+                            artistName = song.artist,
+                            albumName = song.album,
+                            imageUrl = song.artworkUrl
+                        )
+                    )
+            } catch (e: Exception) {
+                Log.e(
+                    "RealMusicRepo",
+                    "Failed adding song to playlist",
+                    e
+                )
+                return
+            }
+        }
+
+        songs.add(song)
+
+        val updatedPlaylist =
+            playlist.copy(
+                songs = songs,
+                songCount = songs.size,
+                coverUrl =
+                    if (playlist.coverUrl.isBlank())
+                        song.artworkUrl
+                    else
+                        playlist.coverUrl
+            )
+
+        currentPlaylists[index] = updatedPlaylist
+        _userPlaylists.value = currentPlaylists
+
+        storage.savePlaylists(currentPlaylists)
+    }
+
+    override suspend fun removeSongFromPlaylist(
+        playlistId: String,
+        songId: String
+    ) {
+        val currentPlaylists =
+            _userPlaylists.value.toMutableList()
+
+        val index =
+            currentPlaylists.indexOfFirst {
+                it.id == playlistId
+            }
+
+        if (index < 0) return
+
+        val playlist = currentPlaylists[index]
+
+        val userId = getUserId()
+
+        if (userId != null) {
+            try {
+                supabase
+                    .from("playlist_songs")
+                    .delete {
+                        filter {
+                            eq("playlist_id", playlistId)
+                            eq("song_id", songId)
+                        }
+                    }
+            } catch (e: Exception) {
+                Log.e(
+                    "RealMusicRepo",
+                    "Failed removing playlist song",
+                    e
+                )
+                return
+            }
+        }
+
+        val songs =
+            playlist.songs.filterNot {
+                it.id == songId
+            }
+
+        val updatedPlaylist =
+            playlist.copy(
+                songs = songs,
+                songCount = songs.size,
+                coverUrl =
+                    if (songs.isEmpty())
+                        ""
+                    else
+                        playlist.coverUrl
+            )
+
+        currentPlaylists[index] = updatedPlaylist
+        _userPlaylists.value = currentPlaylists
+
+        storage.savePlaylists(currentPlaylists)
+    }
+
+    // ---------------------------------------------------------
+    // SEARCH
+    // ---------------------------------------------------------
+
+    override fun search(
+        query: String
+    ): Flow<List<Song>> =
+        flow {
+            val clean = query.trim()
+
+            if (clean.isBlank()) {
+                emit(emptyList())
+                return@flow
+            }
+
+            try {
+                val results =
+                    musicBackendApi.searchMusic(
+                        query = clean,
+                        limit = 25
+                    )
+
+                emit(markFavorites(results))
+
+            } catch (e: Exception) {
+                Log.e(
+                    "RealMusicRepo",
+                    "Search failed for $query",
+                    e
+                )
+
+                emit(emptyList())
+            }
+        }.flowOn(Dispatchers.IO)
+
+    override fun getRecentSearches(): Flow<List<String>> =
+        _recentSearches.asStateFlow()
+
+    override suspend fun addRecentSearch(
+        query: String
+    ) {
+        val clean = query.trim()
+
+        if (clean.isBlank()) return
+
+        val current =
+            _recentSearches.value.toMutableList()
+
+        current.remove(clean)
+        current.add(0, clean)
+
+        _recentSearches.value = current
+        storage.saveRecentSearches(current)
+    }
+
+    override suspend fun clearRecentSearches() {
+        _recentSearches.value = emptyList()
+        storage.saveRecentSearches(emptyList())
+    }
+
+    // ---------------------------------------------------------
+    // HOME FLOWS
+    // ---------------------------------------------------------
+
+    override fun getDiscoverSongs(): Flow<List<Song>> =
+        _discoverSongs.asStateFlow()
+
+    override fun getBiggestHits(): Flow<List<Song>> =
+        _biggestHits.asStateFlow()
+
+    override fun getDanceHits(): Flow<List<Song>> =
+        _danceHits.asStateFlow()
+
+    override fun getTrendingPlaylists(): Flow<List<Playlist>> =
+        _trendingPlaylists.asStateFlow()
+
+    override fun getTopArtists(): Flow<List<Artist>> =
+        _topArtists.asStateFlow()
+
+    override fun getCategories(): Flow<List<MusicCategory>> =
+        flow {
+            emit(
+                listOf(
+                    MusicCategory(
+                        "cat_bollywood",
+                        "Bollywood",
+                        0xFFFF2D75,
+                        0xFFE11D48,
+                        "heart"
+                    ),
+                    MusicCategory(
+                        "cat_punjabi",
+                        "Punjabi",
+                        0xFFF97316,
+                        0xFFEA580C,
+                        "headphones"
+                    ),
+                    MusicCategory(
+                        "cat_pop",
+                        "Pop",
+                        0xFFA855F7,
+                        0xFF7C3AED,
+                        "headphones"
+                    ),
+                    MusicCategory(
+                        "cat_dance",
+                        "Dance & EDM",
+                        0xFF06B6D4,
+                        0xFF0284C7,
+                        "disco"
+                    ),
+                    MusicCategory(
+                        "cat_chill",
+                        "Chill & Lo-Fi",
+                        0xFF10B981,
+                        0xFF059669,
+                        "headphones"
+                    ),
+                    MusicCategory(
+                        "cat_rock",
+                        "Rock & Indie",
+                        0xFFEC4899,
+                        0xFFDB2777,
+                        "headphones"
+                    ),
+                    MusicCategory(
+                        "cat_devotional",
+                        "Devotional",
+                        0xFFF59E0B,
+                        0xFFD97706,
+                        "heart"
+                    ),
+                    MusicCategory(
+                        "cat_hiphop",
+                        "Hip-Hop",
+                        0xFF3B82F6,
+                        0xFF2563EB,
+                        "headphones"
+                    )
+                )
+            )
+        }
+}
