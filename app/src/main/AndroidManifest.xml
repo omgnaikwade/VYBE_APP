@@ -16,6 +16,9 @@
         android:supportsRtl="true"
         android:usesCleartextTraffic="true"
         android:theme="@style/Theme.MyApplication">
+        <receiver
+    android:name=".service.MusicNotificationReceiver"
+    android:exported="false" />
         <activity
             android:name=".MainActivity"
             android:exported="true"
