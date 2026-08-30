@@ -148,6 +148,7 @@ class RealMusicRepository(
                 loadFavoritesFromSupabase(userId)
                 loadHistoryFromSupabase(userId)
                 loadPlaylistsFromSupabase(userId)
+                loadHomeData()
             } catch (e: Exception) {
                 Log.e(
                     "RealMusicRepo",
@@ -300,86 +301,222 @@ class RealMusicRepository(
     // HOME DATA
     // ---------------------------------------------------------
 
-    private fun loadHomeData() {
+     private fun loadHomeData() {
 
-        scope.launch {
-            try {
-                val songs = musicBackendApi.searchMusic(
-                    query = "Top Trending Hits",
-                    limit = 16
-                )
+    scope.launch {
+        try {
 
-                if (songs.isNotEmpty()) {
-                    val marked = markFavorites(songs)
+            val history = _listeningHistory.value
+            val favorites = _favoriteSongs.value
 
-                    _discoverSongs.value = marked
+            // Build personalized search queries from user's taste
+            val preferredArtists =
+                (favorites + history)
+                    .map { it.artist }
+                    .flatMap {
+                        it.split(",", "&", "feat.", "ft.")
+                    }
+                    .map { it.trim() }
+                    .filter { it.isNotBlank() }
+                    .groupingBy { it }
+                    .eachCount()
+                    .entries
+                    .sortedByDescending { it.value }
+                    .take(4)
+                    .map { it.key }
 
-                    storage.saveDiscoverCache(marked)
+            val queries = mutableListOf<String>()
 
-                    updatePlaylistsAndArtists()
+            // Personalized artist recommendations
+            preferredArtists.forEach { artist ->
+                queries.add("$artist songs")
+                queries.add("$artist similar songs")
+            }
+
+            // Cold-start fallback
+            if (queries.isEmpty()) {
+                queries.add("Top Trending Hits")
+                queries.add("Bollywood Hits")
+                queries.add("Trending Hindi Songs")
+                queries.add("Punjabi Hits")
+            }
+
+            val allSongs = mutableListOf<Song>()
+
+            for (query in queries.take(8)) {
+                val results =
+                    musicBackendApi.searchMusic(
+                        query = query,
+                        limit = 8
+                    )
+
+                allSongs.addAll(results)
+            }
+
+            val historyIds =
+                history.map { it.id }.toSet()
+
+            val favoriteIds =
+                favorites.map { it.id }.toSet()
+
+            val preferredArtistNames =
+                preferredArtists.map {
+                    it.lowercase()
                 }
 
-            } catch (e: Exception) {
-                Log.e(
-                    "RealMusicRepo",
-                    "Error loading discover songs",
-                    e
-                )
+            val recommended =
+                allSongs
+                    .distinctBy { it.id }
+                    .filterNot { it.id in historyIds }
+                    .map { song ->
+
+                        val artistLower =
+                            song.artist.lowercase()
+
+                        var score = 0
+
+                        // Strongest signal: favorite artist
+                        if (
+                            preferredArtistNames.any {
+                                artistLower.contains(it)
+                            }
+                        ) {
+                            score += 50
+                        }
+
+                        // Song itself is already liked
+                        if (song.id in favoriteIds) {
+                            score += 40
+                        }
+
+                        // Small bonus for songs related to
+                        // recently listened artists
+                        if (
+                            history.take(10).any {
+                                song.artist.contains(
+                                    it.artist,
+                                    ignoreCase = true
+                                )
+                            }
+                        ) {
+                            score += 30
+                        }
+
+                        // Randomness prevents the Home screen
+                        // from becoming identical every time
+                        score += kotlin.random.Random.nextInt(0, 15)
+
+                        song to score
+                    }
+                    .sortedByDescending { it.second }
+                    .map { it.first }
+                    .take(16)
+
+            if (recommended.isNotEmpty()) {
+
+                val marked =
+                    markFavorites(recommended)
+
+                _discoverSongs.value = marked
+
+                storage.saveDiscoverCache(marked)
+
+                updatePlaylistsAndArtists()
             }
-        }
 
-        scope.launch {
-            try {
-                val songs = musicBackendApi.searchMusic(
-                    query = "Top Bollywood Hits",
-                    limit = 12
-                )
+        } catch (e: Exception) {
 
-                if (songs.isNotEmpty()) {
-                    val marked = markFavorites(songs)
-
-                    _biggestHits.value = marked
-
-                    storage.saveBiggestHitsCache(marked)
-
-                    updatePlaylistsAndArtists()
-                }
-
-            } catch (e: Exception) {
-                Log.e(
-                    "RealMusicRepo",
-                    "Error loading biggest hits",
-                    e
-                )
-            }
-        }
-
-        scope.launch {
-            try {
-                val songs = musicBackendApi.searchMusic(
-                    query = "Dance Party EDM",
-                    limit = 12
-                )
-
-                if (songs.isNotEmpty()) {
-                    val marked = markFavorites(songs)
-
-                    _danceHits.value = marked
-
-                    storage.saveDanceHitsCache(marked)
-
-                    updatePlaylistsAndArtists()
-                }
-
-            } catch (e: Exception) {
-                Log.e(
-                    "RealMusicRepo",
-                    "Error loading dance hits",
-                    e
-                )
-            }
+            Log.e(
+                "RealMusicRepo",
+                "Error loading personalized recommendations",
+                e
+            )
         }
     }
+
+    // Keep genre/mood discovery sections dynamic
+    scope.launch {
+        try {
+
+            val queries = listOf(
+                "Trending Bollywood Songs",
+                "Trending Punjabi Songs",
+                "Trending Pop Songs",
+                "Chill Vibes Songs"
+            )
+
+            val songs = mutableListOf<Song>()
+
+            queries.forEach { query ->
+                songs.addAll(
+                    musicBackendApi.searchMusic(
+                        query = query,
+                        limit = 4
+                    )
+                )
+            }
+
+            val result =
+                songs
+                    .distinctBy { it.id }
+                    .take(12)
+
+            if (result.isNotEmpty()) {
+
+                val marked =
+                    markFavorites(result)
+
+                _biggestHits.value = marked
+
+                storage.saveBiggestHitsCache(marked)
+
+                updatePlaylistsAndArtists()
+            }
+
+        } catch (e: Exception) {
+
+            Log.e(
+                "RealMusicRepo",
+                "Error loading dynamic music categories",
+                e
+            )
+        }
+    }
+
+    scope.launch {
+        try {
+
+            val songs =
+                musicBackendApi.searchMusic(
+                    query = "Trending Dance EDM Party",
+                    limit = 12
+                )
+
+            if (songs.isNotEmpty()) {
+
+                val marked =
+                    markFavorites(songs)
+
+                _danceHits.value = marked
+
+                storage.saveDanceHitsCache(marked)
+
+                updatePlaylistsAndArtists()
+            }
+
+        } catch (e: Exception) {
+
+            Log.e(
+                "RealMusicRepo",
+                "Error loading dance recommendations",
+                e
+            )
+        }
+    }
+     }
+
+                
+
 
     // ---------------------------------------------------------
     // PLAYLISTS + ARTISTS
