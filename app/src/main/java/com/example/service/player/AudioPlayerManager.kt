@@ -8,7 +8,6 @@ import android.util.Log
 import com.example.service.NotificationHelper
 import android.app.PendingIntent
 import android.content.Intent
-import com.example.MainActivity
 import com.example.data.api.MusicBackendApi
 import com.example.data.model.AudioQuality
 import com.example.data.model.PlaybackState
@@ -24,6 +23,8 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import android.os.Build
+import com.example.service.MusicNotificationReceiver
 
 class AudioPlayerManager(
   private val context: Context,
@@ -91,10 +92,46 @@ class AudioPlayerManager(
       )
     }
 
-     NotificationHelper.showMusicNotification(
+     val flags = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+    PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+} else {
+    PendingIntent.FLAG_UPDATE_CURRENT
+}
+
+val playPauseIntent = PendingIntent.getBroadcast(
+    context,
+    1001,
+    Intent(context, MusicNotificationReceiver::class.java).apply {
+        action = NotificationHelper.ACTION_PLAY_PAUSE
+    },
+    flags
+)
+
+val previousIntent = PendingIntent.getBroadcast(
+    context,
+    1002,
+    Intent(context, MusicNotificationReceiver::class.java).apply {
+        action = NotificationHelper.ACTION_PREVIOUS
+    },
+    flags
+)
+
+val nextIntent = PendingIntent.getBroadcast(
+    context,
+    1003,
+    Intent(context, MusicNotificationReceiver::class.java).apply {
+        action = NotificationHelper.ACTION_NEXT
+    },
+    flags
+)
+
+NotificationHelper.showMusicNotification(
     context = context,
     song = song,
-    isPlaying = true
+    isPlaying = true,
+    playPauseIntent = playPauseIntent,
+    previousIntent = previousIntent,
+    nextIntent = nextIntent
 )
     startAudioStream(song, isRetry = false)
   }
