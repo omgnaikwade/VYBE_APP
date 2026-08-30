@@ -127,7 +127,7 @@ val nextIntent = PendingIntent.getBroadcast(
     Intent(context, MusicNotificationReceiver::class.java).apply {
         action = NotificationHelper.ACTION_NEXT
     },
-    flags
+    PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
 )
 
 NotificationHelper.showMusicNotification(
