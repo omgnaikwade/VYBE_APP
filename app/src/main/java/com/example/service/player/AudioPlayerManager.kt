@@ -25,11 +25,16 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import android.os.Build
 import com.example.service.MusicNotificationReceiver
+import com.example.service.PlayerHolder
 
 class AudioPlayerManager(
   private val context: Context,
   private val scope: CoroutineScope
 ) {
+
+  init {
+    PlayerHolder.manager = this
+  }
 
   private val _playbackState = MutableStateFlow(PlaybackState())
   val playbackState: StateFlow<PlaybackState> = _playbackState.asStateFlow()
