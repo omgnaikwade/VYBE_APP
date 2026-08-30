@@ -4,6 +4,7 @@ import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
 import android.content.Context
+import android.media.session.MediaSession
 import android.os.Build
 import androidx.core.app.NotificationCompat
 import com.example.data.model.Song
@@ -36,16 +37,17 @@ object NotificationHelper {
     }
 
     fun showMusicNotification(
-    context: Context,
-    song: Song,
-    isPlaying: Boolean,
-    playPauseIntent: PendingIntent? = null,
-    previousIntent: PendingIntent? = null,
-    nextIntent: PendingIntent? = null
+        context: Context,
+        song: Song,
+        isPlaying: Boolean,
+        mediaSessionToken: MediaSession.Token? = null,
+        playPauseIntent: PendingIntent? = null,
+        previousIntent: PendingIntent? = null,
+        nextIntent: PendingIntent? = null
     ) {
         createChannel(context)
 
-        val notification =
+        val builder =
             NotificationCompat.Builder(context, CHANNEL_ID)
                 .setSmallIcon(com.example.R.drawable.ic_launcher_foreground)
                 .setContentTitle(song.title)
@@ -55,8 +57,16 @@ object NotificationHelper {
                 .setOnlyAlertOnce(true)
                 .setShowWhen(false)
 
+        if (mediaSessionToken != null) {
+            builder.setStyle(
+                androidx.media.app.NotificationCompat.MediaStyle()
+                    .setMediaSession(mediaSessionToken)
+                    .setShowActionsInCompactView(0, 1, 2)
+            )
+        }
+
         previousIntent?.let {
-            notification.addAction(
+            builder.addAction(
                 android.R.drawable.ic_media_previous,
                 "Previous",
                 it
@@ -64,7 +74,7 @@ object NotificationHelper {
         }
 
         playPauseIntent?.let {
-            notification.addAction(
+            builder.addAction(
                 if (isPlaying)
                     android.R.drawable.ic_media_pause
                 else
@@ -75,7 +85,7 @@ object NotificationHelper {
         }
 
         nextIntent?.let {
-            notification.addAction(
+            builder.addAction(
                 android.R.drawable.ic_media_next,
                 "Next",
                 it
@@ -86,7 +96,7 @@ object NotificationHelper {
             context.getSystemService(Context.NOTIFICATION_SERVICE)
                     as NotificationManager
 
-        manager.notify(NOTIFICATION_ID, notification.build())
+        manager.notify(NOTIFICATION_ID, builder.build())
     }
 
     fun cancel(context: Context) {
